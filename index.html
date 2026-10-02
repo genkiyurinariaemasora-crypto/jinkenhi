@@ -47,7 +47,8 @@
 <script src="https://cdn.jsdelivr.net/npm/prop-types@15.8.1/prop-types.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 </head>
 <body>
 <div id="err"></div>
@@ -850,34 +851,94 @@
       return `\u4EBA\u4EF6\u8CBB\u5206\u6790_${bn}_${cur.year}\u5E74${cur.month}\u6708.pdf`;
     };
     const makePdf = async () => {
-      if (!reportRef.current || typeof html2pdf === "undefined") {
+      const root = reportRef.current;
+      if (!root || typeof html2canvas === "undefined" || !window.jspdf) {
         flash("PDF\u306E\u90E8\u54C1\u3092\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u30DA\u30FC\u30B8\u3092\u958B\u304D\u76F4\u3057\u3066\u304F\u3060\u3055\u3044");
         return;
       }
       setPdfBusy(true);
+      const wrap = root.parentElement;
+      const prevOverflow = wrap ? wrap.style.overflowX : "";
+      if (wrap) wrap.style.overflowX = "visible";
       try {
-        const blob = await html2pdf().set({
-          margin: [8, 8, 10, 8],
-          filename: pdfName(),
-          image: { type: "jpeg", quality: 0.95 },
-          html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff", windowWidth: 820 },
-          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-          pagebreak: { mode: ["css", "legacy"], avoid: [".avoid-break", "tr"] }
-        }).from(reportRef.current).outputPdf("blob");
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
+        const PW = 210, PH = 297, M = 10;
+        const CW = PW - M * 2;
+        const BOTTOM = PH - M - 6;
+        let y = M;
+        let page = 1;
+        const footer = () => {
+          doc.setFontSize(8);
+          doc.setTextColor(120);
+          doc.text(String(page), PW / 2, PH - 5, { align: "center" });
+        };
+        const blocks = Array.from(root.children);
+        for (let i = 0; i < blocks.length; i++) {
+          const el = blocks[i];
+          const w = Math.max(el.scrollWidth, el.offsetWidth);
+          const canvas = await html2canvas(el, {
+            scale: 2,
+            backgroundColor: "#ffffff",
+            useCORS: true,
+            logging: false,
+            width: w,
+            windowWidth: Math.max(1100, w + 100),
+            scrollX: 0,
+            scrollY: 0
+          });
+          const hMM = canvas.height * CW / canvas.width;
+          const gap = i === 0 ? 0 : 4;
+          if (hMM <= BOTTOM - M) {
+            if (y + gap + hMM > BOTTOM) {
+              footer();
+              doc.addPage();
+              page++;
+              y = M;
+            } else y += gap;
+            doc.addImage(canvas.toDataURL("image/jpeg", 0.92), "JPEG", M, y, CW, hMM);
+            y += hMM;
+          } else {
+            const pxPerMM = canvas.width / CW;
+            let srcY = 0;
+            if (y > M) {
+              footer();
+              doc.addPage();
+              page++;
+              y = M;
+            }
+            while (srcY < canvas.height) {
+              const roomMM = BOTTOM - y;
+              const slicePx = Math.min(canvas.height - srcY, Math.floor(roomMM * pxPerMM));
+              const part = document.createElement("canvas");
+              part.width = canvas.width;
+              part.height = slicePx;
+              part.getContext("2d").drawImage(canvas, 0, srcY, canvas.width, slicePx, 0, 0, canvas.width, slicePx);
+              doc.addImage(part.toDataURL("image/jpeg", 0.92), "JPEG", M, y, CW, slicePx / pxPerMM);
+              srcY += slicePx;
+              y += slicePx / pxPerMM;
+              if (srcY < canvas.height) {
+                footer();
+                doc.addPage();
+                page++;
+                y = M;
+              }
+            }
+          }
+        }
+        footer();
+        const blob = doc.output("blob");
         setPdfFile(new File([blob], pdfName(), { type: "application/pdf" }));
       } catch (e) {
         flash("PDF\u3092\u4F5C\u308C\u307E\u305B\u3093\u3067\u3057\u305F\uFF1A" + (e && e.message ? e.message : ""));
       } finally {
+        if (wrap) wrap.style.overflowX = prevOverflow;
         setPdfBusy(false);
       }
     };
     const sharePdf = () => {
       if (!pdfFile) return;
-      navigator.share({
-        files: [pdfFile],
-        title: pdfFile.name.replace(/\.pdf$/, ""),
-        text: `${monthLabel(cur.key)} \u4EBA\u4EF6\u8CBB\u30FB\u4EBA\u6642\u58F2\u4E0A\u5831\u544A`
-      }).catch((e) => {
+      navigator.share({ files: [pdfFile] }).catch((e) => {
         if (e && e.name === "AbortError") return;
         flash("\u5171\u6709\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u300CPDF\u3092\u4FDD\u5B58\u300D\u304B\u3089\u9001\u3063\u3066\u304F\u3060\u3055\u3044");
       });
@@ -1631,11 +1692,12 @@
       background: "#fff",
       border: `1px solid ${C.border}`,
       borderRadius: 6,
-      padding: 26,
+      padding: 24,
       color: C.ink,
-      width: 760,
-      minWidth: 760,
-      margin: "0 auto"
+      width: 820,
+      minWidth: 820,
+      margin: "0 auto",
+      boxSizing: "border-box"
     } }, /* @__PURE__ */ React.createElement("div", { className: "avoid-break", style: { borderBottom: `2px solid ${C.navy}`, paddingBottom: 10, marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 18, fontWeight: 700, color: C.navy, letterSpacing: ".03em" } }, blockRow ? blockRow.name.replace(/[（(].*?[）)]/, "") : "\u81EA\u30D6\u30ED\u30C3\u30AF", "\u3000\u4EBA\u4EF6\u8CBB\u30FB\u4EBA\u6642\u58F2\u4E0A\u5831\u544A"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, color: C.muted, marginTop: 4 } }, "\u5BFE\u8C61\u671F\u9593 ", cur.periodLabel, cur.weekend != null && `\u3000\uFF0F\u3000\u571F\u65E5\u795D \u5F53\u5E74${cur.weekend}\u65E5\u30FB\u524D\u5E74${(_b = cur.weekendLY) != null ? _b : "\u2014"}\u65E5`), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11.5, color: C.muted, marginTop: 2 } }, "\u5BFE\u8C61\u5E97\u8217 ", blockStores.map((s) => s.name).join("\u30FB"), refStores.length > 0 && `\uFF08${refStores.map((s) => s.name).join("\u30FB")}\u306F\u5408\u8A08\u306B\u542B\u307E\u305A\uFF09`)), /* @__PURE__ */ React.createElement("div", { className: "avoid-break", style: { marginBottom: 18 } }, /* @__PURE__ */ React.createElement(ReportHeading, null, "1. \u30D6\u30ED\u30C3\u30AF\u5408\u8A08"), /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse" } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement(Th, { align: "left" }, "\u9805\u76EE"), /* @__PURE__ */ React.createElement(Th, null, "\u5F53\u5E74"), /* @__PURE__ */ React.createElement(Th, null, "\u524D\u5E74"), /* @__PURE__ */ React.createElement(Th, null, "\u5DEE\uFF0F\u524D\u5E74\u6BD4"))), /* @__PURE__ */ React.createElement("tbody", null, [
       [
         "\u58F2\u4E0A\uFF08\u5343\u5186\uFF09",
