@@ -778,6 +778,8 @@
     const commentTimer = useRef(null);
     const setComment = (scope, code, text) => {
       if (!cur) return;
+      setPdfFile(null);
+      setPdfStale(true);
       const m = { ...cur, comments: { ...cur.comments || { block: "", stores: {} } } };
       if (scope === "block") m.comments.block = text;
       else m.comments.stores = { ...m.comments.stores, [code]: text };
@@ -935,8 +937,11 @@
     }, [cur, groups.all]);
     const [pdfFile, setPdfFile] = useState(null);
     const [pdfBusy, setPdfBusy] = useState(false);
+    const [pdfStale, setPdfStale] = useState(false);
+    const [openNote, setOpenNote] = useState(null);
     useEffect(() => {
       setPdfFile(null);
+      setPdfStale(false);
     }, [selKey, blockNo]);
     const isMobile = typeof navigator !== "undefined" && (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
     const canSharePdf = useMemo(() => {
@@ -1048,6 +1053,7 @@
         if (inked === 0) throw new Error("\u8CC7\u6599\u304C\u767D\u7D19\u306B\u306A\u308A\u307E\u3057\u305F\u3002\u753B\u9762\u3092\u4E00\u5EA6\u9589\u3058\u3066\u958B\u304D\u76F4\u3057\u3066\u304B\u3089\u3001\u3082\u3046\u4E00\u5EA6\u304A\u8A66\u3057\u304F\u3060\u3055\u3044");
         const blob = doc.output("blob");
         setPdfFile(new File([blob], pdfName(), { type: "application/pdf" }));
+        setPdfStale(false);
       } catch (e) {
         flash("PDF\u3092\u4F5C\u308C\u307E\u305B\u3093\u3067\u3057\u305F\uFF1A" + (e && e.message ? e.message : ""));
       } finally {
@@ -1056,6 +1062,13 @@
         setPdfBusy(false);
       }
     };
+    useEffect(() => {
+      if (tab !== "send" || !cur || pdfFile || pdfBusy || pdfStale) return;
+      const t = setTimeout(() => {
+        makePdf();
+      }, 500);
+      return () => clearTimeout(t);
+    }, [tab, selKey]);
     const sharePdf = () => {
       if (!pdfFile) return;
       navigator.share({ files: [pdfFile] }).catch((e) => {
@@ -1162,7 +1175,7 @@
       const over = withTarget.filter((s) => s.mhs >= s.target).map((s) => s.name);
       const under = withTarget.filter((s) => s.mhs < s.target).sort((a, b) => a.mhs - a.target - (b.mhs - b.target));
       const L = [];
-      L.push(`\u3010${monthLabel(cur.key)} ${blockAgg.name || "\u81EA\u30D6\u30ED\u30C3\u30AF"}\u3011`);
+      L.push(`\u3010${monthLabel(cur.key)} ${(blockAgg.name || "\u81EA\u30D6\u30ED\u30C3\u30AF").replace(/[（(].*?[）)]/, "")}\u3011`);
       L.push(`\u58F2\u4E0A ${fmt(blockAgg.sales)}\u5343\u5186\uFF08\u524D\u5E74\u6BD4 ${yoy ? (yoy * 100).toFixed(1) : "\u2014"}%\uFF09\u3001\u4EBA\u4EF6\u8CBB\u7387 ${pct(blockAgg.laborPct)}\uFF08\u524D\u5E74 ${pct(blockAgg.laborPctLY)}\uFF09\u3002`);
       L.push(`\u4EBA\u6642\u58F2\u4E0A ${fmt(blockAgg.mhs)}\u5186\uFF08\u524D\u5E74 ${fmt(blockAgg.mhsLY)}\u5186\u3001${signed(mhsDiff)}\u5186\uFF09\u3001\u7DCF\u52B4\u50CD\u6642\u9593 ${fmt(blockAgg.hours, 1)}h\u3002`);
       if (over.length) L.push(`\u6307\u6A19\u9054\u6210\uFF1A${over.join("\u30FB")}\u3002`);
@@ -1187,8 +1200,7 @@
       ["dash", "\u30DB\u30FC\u30E0"],
       ["stores", "\u5E97\u8217"],
       ["metric", "\u6307\u6A19\u5225"],
-      ["comment", "\u30B3\u30E1\u30F3\u30C8"],
-      ["report", "\u8CC7\u6599"],
+      ["send", "\u9001\u308B"],
       ["data", "\u53D6\u8FBC\u30FB\u8A2D\u5B9A"]
     ];
     return /* @__PURE__ */ React.createElement("div", { className: "print-root", style: { fontFamily: FONT, background: C.bg, minHeight: "100vh", color: C.ink } }, /* @__PURE__ */ React.createElement("style", null, `
@@ -1868,13 +1880,97 @@
           }
         ))
       )))));
-    })()), tab === "report" && cur && blockAgg && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "no-print", style: {
+    })()), tab === "send" && cur && blockAgg && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement("div", { className: "no-print", style: { display: "flex", alignItems: "baseline", justifyContent: "space-between", margin: "2px 2px 10px" } }, /* @__PURE__ */ React.createElement("h2", { style: { margin: 0, fontSize: 17, fontWeight: 700, color: C.navy } }, "\u5831\u544A\u3092\u9001\u308B"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12.5, color: "#4A5A6E" } }, monthLabel(cur.key))), /* @__PURE__ */ React.createElement("section", { className: "no-print", style: { background: C.panel, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 10 } }, /* @__PURE__ */ React.createElement("span", { style: { width: 26, height: 26, borderRadius: 13, background: C.navy, color: "#fff", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, "1"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 15, fontWeight: 700, color: C.ink } }, "\u7DCF\u62EC\u3092\u78BA\u304B\u3081\u308B")), /* @__PURE__ */ React.createElement(
+      "textarea",
+      {
+        "aria-label": "\u7DCF\u62EC",
+        value: cur.comments && cur.comments.block || "",
+        onChange: (e) => setComment("block", null, e.target.value),
+        placeholder: "\u5168\u4F53\u306E\u8B1B\u8A55\u3001\u8981\u56E0\u3001\u6B21\u6708\u306E\u91CD\u70B9\u65BD\u7B56\u306A\u3069",
+        style: {
+          width: "100%",
+          minHeight: 150,
+          fontFamily: FONT,
+          fontSize: 14,
+          lineHeight: 1.75,
+          color: C.ink,
+          padding: "10px 12px",
+          border: "1px solid #C9D4E0",
+          borderRadius: 8,
+          resize: "vertical",
+          boxSizing: "border-box"
+        }
+      }
+    ), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" } }, (cur.comments && cur.comments.block || "").trim() === "" ? /* @__PURE__ */ React.createElement("button", { onClick: () => setComment("block", null, draft), style: {
+      fontFamily: FONT,
+      fontSize: 14,
+      fontWeight: 700,
+      height: 44,
+      padding: "0 16px",
+      borderRadius: 8,
+      border: "none",
+      background: C.navy,
+      color: "#fff",
+      cursor: "pointer"
+    } }, "\u6570\u5B57\u304B\u3089\u4E0B\u66F8\u304D\u3092\u5165\u308C\u308B") : /* @__PURE__ */ React.createElement("button", { onClick: () => {
+      if (window.confirm("\u3044\u307E\u306E\u6587\u7AE0\u3092\u3001\u6570\u5B57\u304B\u3089\u4F5C\u3063\u305F\u4E0B\u66F8\u304D\u306B\u7F6E\u304D\u63DB\u3048\u307E\u3059\u3002\u3088\u308D\u3057\u3044\u3067\u3059\u304B\uFF1F")) setComment("block", null, draft);
+    }, style: {
+      fontFamily: FONT,
+      fontSize: 13,
+      height: 40,
+      padding: "0 14px",
+      borderRadius: 8,
+      border: "1px solid #C9D4E0",
+      background: "#fff",
+      color: C.navy,
+      cursor: "pointer"
+    } }, "\u6570\u5B57\u304B\u3089\u4E0B\u66F8\u304D\u3092\u4F5C\u308A\u76F4\u3059"))), /* @__PURE__ */ React.createElement("section", { className: "no-print", style: { background: C.panel, border: `1px solid ${C.border}`, borderRadius: 12, padding: "14px 14px 6px", marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 10 } }, /* @__PURE__ */ React.createElement("span", { style: { width: 26, height: 26, borderRadius: 13, background: C.navy, color: "#fff", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, "2"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 15, fontWeight: 700, color: C.ink } }, "\u5E97\u8217\u3054\u3068\u306E\u3072\u3068\u3053\u3068"), " ", /* @__PURE__ */ React.createElement("span", { style: { fontSize: 11, color: "#4A5A6E", background: "#E3E9F0", padding: "2px 7px", borderRadius: 5 } }, "\u4EFB\u610F")), storeCards.map((c, i) => {
+      const s = c.s;
+      const text = cur.comments && cur.comments.stores && cur.comments.stores[s.code] || "";
+      const open = openNote === s.code;
+      return /* @__PURE__ */ React.createElement("div", { key: s.code, style: { borderTop: i === 0 ? "none" : "1px solid #E3E9F0" } }, /* @__PURE__ */ React.createElement("button", { onClick: () => setOpenNote(open ? null : s.code), style: {
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        minHeight: 48,
+        padding: "6px 2px",
+        background: "transparent",
+        border: "none",
+        cursor: "pointer",
+        fontFamily: FONT,
+        textAlign: "left",
+        color: C.ink
+      } }, /* @__PURE__ */ React.createElement("span", { style: { flexGrow: 1, minWidth: 0 } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 14, fontWeight: 700, display: "block" } }, s.name), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 12, color: "#4A5A6E", display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, text ? text : c.status === "miss" ? `\u6307\u6A19 ${signed(Math.round(c.diff))}\u5186` : c.status === "closed" ? "\u4F11\u696D\u4E2D" : "")), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13, color: C.navy, flexShrink: 0 } }, open ? "\u9589\u3058\u308B" : text ? "\u76F4\u3059 \u203A" : "\u66F8\u304F \u203A")), open && /* @__PURE__ */ React.createElement(
+        "textarea",
+        {
+          "aria-label": `${s.name}\u306E\u3072\u3068\u3053\u3068`,
+          autoFocus: true,
+          value: text,
+          onChange: (e) => setComment("store", s.code, e.target.value),
+          placeholder: "\u8981\u56E0\u3068\u5BFE\u7B56",
+          style: {
+            width: "100%",
+            minHeight: 80,
+            fontFamily: FONT,
+            fontSize: 14,
+            lineHeight: 1.7,
+            marginBottom: 10,
+            padding: "8px 10px",
+            border: "1px solid #C9D4E0",
+            borderRadius: 8,
+            resize: "vertical",
+            boxSizing: "border-box"
+          }
+        }
+      ));
+    })), /* @__PURE__ */ React.createElement("div", { className: "no-print", style: {
       background: C.panel,
       border: `1px solid ${C.border}`,
-      borderRadius: 6,
+      borderRadius: 12,
       padding: 14,
       marginBottom: 14
-    } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: C.navy, marginBottom: 4 } }, "\u8CC7\u6599\u3092PDF\u3067\u9001\u308B"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11.5, color: C.muted, marginBottom: 12 } }, monthLabel(cur.key), "\u30FBA4\u7E26\u3002\u4E0B\u306B\u8868\u793A\u3055\u308C\u3066\u3044\u308B\u5185\u5BB9\u304C\u305D\u306E\u307E\u307EPDF\u306B\u306A\u308A\u307E\u3059\u3002"), !pdfFile && /* @__PURE__ */ React.createElement("button", { onClick: makePdf, disabled: pdfBusy, style: {
+    } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, marginBottom: 10 } }, /* @__PURE__ */ React.createElement("span", { style: { width: 26, height: 26, borderRadius: 13, background: C.navy, color: "#fff", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } }, "3"), /* @__PURE__ */ React.createElement("span", { style: { fontSize: 15, fontWeight: 700, color: C.ink } }, "\u9001\u308B")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11.5, color: C.muted, marginBottom: 12 } }, monthLabel(cur.key), "\u30FBA4\u7E26\u3002\u4E0B\u306E\u300CPDF\u306E\u4E2D\u8EAB\u300D\u304C\u305D\u306E\u307E\u307EPDF\u306B\u306A\u308A\u307E\u3059\u3002"), !pdfFile && /* @__PURE__ */ React.createElement("button", { onClick: makePdf, disabled: pdfBusy, style: {
       width: "100%",
       maxWidth: 360,
       fontFamily: FONT,
@@ -1886,7 +1982,7 @@
       cursor: pdfBusy ? "default" : "pointer",
       background: pdfBusy ? "#8FA6BC" : C.navy,
       color: "#fff"
-    } }, pdfBusy ? "PDF\u3092\u4F5C\u3063\u3066\u3044\u307E\u3059\u2026" : "\u2460 PDF\u3092\u4F5C\u308B"), pdfFile && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: {
+    } }, pdfBusy ? "PDF\u3092\u7528\u610F\u3057\u3066\u3044\u307E\u3059\u2026" : pdfStale ? "\u30B3\u30E1\u30F3\u30C8\u3092\u53CD\u6620\u3057\u3066PDF\u3092\u4F5C\u308A\u76F4\u3059" : "PDF\u3092\u4F5C\u308B"), pdfFile && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: {
       display: "flex",
       alignItems: "center",
       gap: 8,
@@ -1908,7 +2004,7 @@
       cursor: "pointer",
       background: "#06C755",
       color: "#fff"
-    } }, "\u2461 LINE\u30FBLINE WORKS\u3067\u9001\u308B"), /* @__PURE__ */ React.createElement("button", { onClick: downloadPdf, style: {
+    } }, "LINE\u30FBLINE WORKS\u3067\u9001\u308B"), /* @__PURE__ */ React.createElement("button", { onClick: downloadPdf, style: {
       flex: "1 1 160px",
       fontFamily: FONT,
       fontSize: 14,
@@ -1919,7 +2015,7 @@
       background: canSharePdf ? "#fff" : C.navy,
       color: canSharePdf ? C.navy : "#fff",
       border: canSharePdf ? `1px solid ${C.border}` : "none"
-    } }, canSharePdf ? "PDF\u3092\u4FDD\u5B58" : "\u2461 PDF\u3092\u4FDD\u5B58"), /* @__PURE__ */ React.createElement("button", { onClick: () => setPdfFile(null), style: {
+    } }, "PDF\u3092\u4FDD\u5B58"), /* @__PURE__ */ React.createElement("button", { onClick: () => setPdfFile(null), style: {
       flex: "0 0 auto",
       fontFamily: FONT,
       fontSize: 13,
@@ -1929,7 +2025,7 @@
       background: "transparent",
       color: C.muted,
       border: `1px solid ${C.border}`
-    } }, "\u4F5C\u308A\u76F4\u3059")), /* @__PURE__ */ React.createElement("p", { style: { fontSize: 11.5, color: C.muted, lineHeight: 1.85, margin: "12px 0 0" } }, canSharePdf ? "\u300C\u9001\u308B\u300D\u3092\u62BC\u3059\u3068\u5171\u6709\u30E1\u30CB\u30E5\u30FC\u304C\u958B\u304D\u307E\u3059\u3002LINE \u304B LINE WORKS \u3092\u9078\u3073\u3001\u9001\u308A\u5148\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044\u3002" : isMobile ? "\u3053\u306E\u7AEF\u672B\u306F\u76F4\u63A5\u5171\u6709\u306B\u5BFE\u5FDC\u3057\u3066\u3044\u307E\u305B\u3093\u3002\u300CPDF\u3092\u4FDD\u5B58\u300D\u3057\u3066\u304B\u3089\u3001LINE\u30FBLINE WORKS \u3067\u6DFB\u4ED8\u3057\u3066\u9001\u3063\u3066\u304F\u3060\u3055\u3044\u3002" : "PC\u3067\u306F\u300CPDF\u3092\u4FDD\u5B58\u300D\u3092\u62BC\u3057\u3001\u4FDD\u5B58\u3055\u308C\u305FPDF\u3092 LINE\u30FBLINE WORKS \u306E\u30C8\u30FC\u30AF\u753B\u9762\u306B\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u9001\u3063\u3066\u304F\u3060\u3055\u3044\u3002")), /* @__PURE__ */ React.createElement("details", { style: { marginTop: 14 } }, /* @__PURE__ */ React.createElement("summary", { style: { fontSize: 12, color: C.muted, cursor: "pointer" } }, "\u5370\u5237\u3059\u308B\u30FBHTML\u3067\u4FDD\u5B58\u3059\u308B"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 } }, /* @__PURE__ */ React.createElement(Btn, { small: true, onClick: () => window.print() }, "\u5370\u5237"), /* @__PURE__ */ React.createElement(Btn, { small: true, onClick: exportReportHtml }, "HTML\u3067\u4FDD\u5B58")))), /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto", WebkitOverflowScrolling: "touch" } }, /* @__PURE__ */ React.createElement("div", { ref: reportRef, style: {
+    } }, "\u4F5C\u308A\u76F4\u3059")), /* @__PURE__ */ React.createElement("p", { style: { fontSize: 11.5, color: C.muted, lineHeight: 1.85, margin: "12px 0 0" } }, canSharePdf ? "\u300C\u9001\u308B\u300D\u3092\u62BC\u3059\u3068\u5171\u6709\u30E1\u30CB\u30E5\u30FC\u304C\u958B\u304D\u307E\u3059\u3002LINE \u304B LINE WORKS \u3092\u9078\u3073\u3001\u9001\u308A\u5148\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044\u3002" : isMobile ? "\u3053\u306E\u7AEF\u672B\u306F\u76F4\u63A5\u5171\u6709\u306B\u5BFE\u5FDC\u3057\u3066\u3044\u307E\u305B\u3093\u3002\u300CPDF\u3092\u4FDD\u5B58\u300D\u3057\u3066\u304B\u3089\u3001LINE\u30FBLINE WORKS \u3067\u6DFB\u4ED8\u3057\u3066\u9001\u3063\u3066\u304F\u3060\u3055\u3044\u3002" : "PC\u3067\u306F\u300CPDF\u3092\u4FDD\u5B58\u300D\u3092\u62BC\u3057\u3001\u4FDD\u5B58\u3055\u308C\u305FPDF\u3092 LINE\u30FBLINE WORKS \u306E\u30C8\u30FC\u30AF\u753B\u9762\u306B\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u9001\u3063\u3066\u304F\u3060\u3055\u3044\u3002")), /* @__PURE__ */ React.createElement("details", { style: { marginTop: 14 } }, /* @__PURE__ */ React.createElement("summary", { style: { fontSize: 12, color: C.muted, cursor: "pointer" } }, "\u5370\u5237\u3059\u308B\u30FBHTML\u3067\u4FDD\u5B58\u3059\u308B"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 } }, /* @__PURE__ */ React.createElement(Btn, { small: true, onClick: () => window.print() }, "\u5370\u5237"), /* @__PURE__ */ React.createElement(Btn, { small: true, onClick: exportReportHtml }, "HTML\u3067\u4FDD\u5B58")))), /* @__PURE__ */ React.createElement("div", { className: "no-print", style: { fontSize: 13, fontWeight: 700, color: C.navy, margin: "4px 2px 8px" } }, "PDF\u306E\u4E2D\u8EAB"), /* @__PURE__ */ React.createElement("div", { style: { overflowX: "auto", WebkitOverflowScrolling: "touch" } }, /* @__PURE__ */ React.createElement("div", { ref: reportRef, style: {
       background: "#fff",
       border: `1px solid ${C.border}`,
       borderRadius: 6,
@@ -1997,62 +2093,7 @@
       \u5F53\u5E74: s.mhs ? Math.round(s.mhs) : null,
       \u524D\u5E74: s.mhsLY ? Math.round(s.mhsLY) : null,
       \u6307\u6A19: hasTarget(s) ? Math.round(s.target) : null
-    })), margin: { top: 6, right: 8, left: 0, bottom: 4 } }, /* @__PURE__ */ React.createElement(CartesianGrid, { stroke: "#E7ECF2", vertical: false }), /* @__PURE__ */ React.createElement(XAxis, { dataKey: "name", tick: { fontSize: 11, fill: C.muted }, interval: 0 }), /* @__PURE__ */ React.createElement(YAxis, { tick: { fontSize: 11, fill: C.muted }, width: 54, domain: ["dataMin - 500", "dataMax + 300"] }), /* @__PURE__ */ React.createElement(Legend, { wrapperStyle: { fontSize: 11.5 } }), /* @__PURE__ */ React.createElement(Bar, { dataKey: "\u5F53\u5E74", fill: C.navyLight, isAnimationActive: false }), /* @__PURE__ */ React.createElement(Bar, { dataKey: "\u524D\u5E74", fill: "#BCCCDC", isAnimationActive: false }), /* @__PURE__ */ React.createElement(Line, { dataKey: "\u6307\u6A19", stroke: C.warn, strokeWidth: 2, dot: { r: 3.5 }, isAnimationActive: false }))))), trend.length >= 2 && /* @__PURE__ */ React.createElement("div", { className: "avoid-break", style: { marginBottom: 18 } }, /* @__PURE__ */ React.createElement(ReportHeading, null, "4. \u6708\u5225\u63A8\u79FB"), /* @__PURE__ */ React.createElement("div", { style: { height: 230 } }, /* @__PURE__ */ React.createElement(ResponsiveContainer, { width: "100%", height: "100%" }, /* @__PURE__ */ React.createElement(LineChart, { data: trend, margin: { top: 6, right: 8, left: 0, bottom: 4 } }, /* @__PURE__ */ React.createElement(CartesianGrid, { stroke: "#E7ECF2", vertical: false }), /* @__PURE__ */ React.createElement(XAxis, { dataKey: "name", tick: { fontSize: 11, fill: C.muted } }), /* @__PURE__ */ React.createElement(YAxis, { tick: { fontSize: 11, fill: C.muted }, width: 54, domain: ["dataMin - 300", "dataMax + 300"] }), /* @__PURE__ */ React.createElement(Legend, { wrapperStyle: { fontSize: 11.5 } }), /* @__PURE__ */ React.createElement(Line, { dataKey: "\u4EBA\u6642\u58F2\u4E0A", stroke: C.navy, strokeWidth: 2.5, dot: { r: 3.5 }, isAnimationActive: false }), /* @__PURE__ */ React.createElement(Line, { dataKey: "\u524D\u5E74\u4EBA\u6642\u58F2\u4E0A", stroke: "#A9BDD0", strokeWidth: 2, strokeDasharray: "4 3", dot: false, isAnimationActive: false })))), /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", marginTop: 8 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement(Th, { align: "left" }, "\u6708"), /* @__PURE__ */ React.createElement(Th, null, "\u58F2\u4E0A"), /* @__PURE__ */ React.createElement(Th, null, "\u524D\u5E74\u6BD4"), /* @__PURE__ */ React.createElement(Th, null, "\u4EBA\u4EF6\u8CBB\u7387"), /* @__PURE__ */ React.createElement(Th, null, "\u52B4\u50CD\u6642\u9593"), /* @__PURE__ */ React.createElement(Th, null, "\u4EBA\u6642\u58F2\u4E0A"), /* @__PURE__ */ React.createElement(Th, null, "\u524D\u5E74"))), /* @__PURE__ */ React.createElement("tbody", null, trend.slice().reverse().map((t, i) => /* @__PURE__ */ React.createElement("tr", { key: t.key, style: { background: i % 2 ? C.rowAlt : "transparent" } }, /* @__PURE__ */ React.createElement(Td, { align: "left", bold: true }, monthLabel(t.key)), /* @__PURE__ */ React.createElement(Td, null, fmt(t.\u58F2\u4E0A)), /* @__PURE__ */ React.createElement(Td, { tone: t.\u58F2\u4E0A\u524D\u5E74\u6BD4 >= 100 ? "pos" : "neg" }, t.\u58F2\u4E0A\u524D\u5E74\u6BD4 ? t.\u58F2\u4E0A\u524D\u5E74\u6BD4.toFixed(1) + "%" : "\u2014"), /* @__PURE__ */ React.createElement(Td, null, t.\u4EBA\u4EF6\u8CBB\u7387 ? t.\u4EBA\u4EF6\u8CBB\u7387.toFixed(1) + "%" : "\u2014"), /* @__PURE__ */ React.createElement(Td, null, fmt(t.\u52B4\u50CD\u6642\u9593, 1)), /* @__PURE__ */ React.createElement(Td, { bold: true }, fmt(t.\u4EBA\u6642\u58F2\u4E0A)), /* @__PURE__ */ React.createElement(Td, null, fmt(t.\u524D\u5E74\u4EBA\u6642\u58F2\u4E0A))))))), /* @__PURE__ */ React.createElement("div", { className: "avoid-break", style: { marginBottom: 18 } }, /* @__PURE__ */ React.createElement(ReportHeading, null, trend.length >= 2 ? "5" : "4", ". \u5168\u793E\u30FB\u95A2\u897F\u3068\u306E\u6BD4\u8F03"), /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse" } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement(Th, { align: "left" }, "\u533A\u5206"), /* @__PURE__ */ React.createElement(Th, null, "\u58F2\u4E0A\u524D\u5E74\u6BD4"), /* @__PURE__ */ React.createElement(Th, null, "\u4EBA\u4EF6\u8CBB\u7387"), /* @__PURE__ */ React.createElement(Th, null, "\u524D\u5E74"), /* @__PURE__ */ React.createElement(Th, null, "\u4EBA\u6642\u58F2\u4E0A"), /* @__PURE__ */ React.createElement(Th, null, "\u524D\u5E74"), /* @__PURE__ */ React.createElement(Th, null, "\u524D\u5E74\u5DEE"))), /* @__PURE__ */ React.createElement("tbody", null, [["\u81EA\u30D6\u30ED\u30C3\u30AF", blockAgg], ["\u95A2\u897F", cur.aggregates.kansai], ["\u5168\u5E97", cur.aggregates.all]].filter(([, v]) => v).map(([label, v], i) => /* @__PURE__ */ React.createElement("tr", { key: label, style: { background: i === 0 ? "#E4EDF5" : "transparent" } }, /* @__PURE__ */ React.createElement(Td, { align: "left", bold: i === 0 }, label), /* @__PURE__ */ React.createElement(Td, { tone: v.sales >= v.salesLY ? "pos" : "neg" }, v.salesLY ? (v.sales / v.salesLY * 100).toFixed(1) + "%" : "\u2014"), /* @__PURE__ */ React.createElement(Td, null, pct(v.laborPct)), /* @__PURE__ */ React.createElement(Td, null, pct(v.laborPctLY)), /* @__PURE__ */ React.createElement(Td, { bold: i === 0 }, fmt(v.mhs)), /* @__PURE__ */ React.createElement(Td, null, fmt(v.mhsLY)), /* @__PURE__ */ React.createElement(Td, { tone: v.mhs >= v.mhsLY ? "pos" : "neg" }, signed(v.mhs - v.mhsLY))))))), (blockComment || storeComments.length > 0) && /* @__PURE__ */ React.createElement("div", { className: "avoid-break" }, /* @__PURE__ */ React.createElement(ReportHeading, null, trend.length >= 2 ? "6" : "5", ". \u7DCF\u62EC\u3068\u30B3\u30E1\u30F3\u30C8"), blockComment && /* @__PURE__ */ React.createElement("p", { style: { fontSize: 12.5, lineHeight: 1.9, whiteSpace: "pre-wrap", margin: "0 0 12px" } }, blockComment), storeComments.map(({ name, text }) => /* @__PURE__ */ React.createElement("div", { key: name, style: { marginBottom: 9 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, fontWeight: 700, color: C.navy } }, name), /* @__PURE__ */ React.createElement("p", { style: { fontSize: 12.5, lineHeight: 1.9, whiteSpace: "pre-wrap", margin: "2px 0 0" } }, text)))), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 20, paddingTop: 8, borderTop: `1px solid ${C.border}`, fontSize: 10.5, color: C.muted } }, "\u4F5C\u6210\u65E5 ", (/* @__PURE__ */ new Date()).toLocaleDateString("ja-JP"), "\u3000\uFF0F\u3000\u51FA\u5178 \u4EBA\u4EF6\u8CBB\u9001\u4ED8\u7528\u30C7\u30FC\u30BF ", cur.meta.fileName)))), tab === "comment" && cur && /* @__PURE__ */ React.createElement(React.Fragment, null, /* @__PURE__ */ React.createElement(SectionTitle, { label: "\u5831\u544A\u30B3\u30E1\u30F3\u30C8\u3092\u66F8\u304F", sub: "\u5165\u529B\u3057\u305F\u6642\u70B9\u3067\u81EA\u52D5\u4FDD\u5B58\u3055\u308C\u307E\u3059" }), /* @__PURE__ */ React.createElement(Panel, { title: `${monthLabel(cur.key)} \u30D6\u30ED\u30C3\u30AF\u7DCF\u62EC` }, /* @__PURE__ */ React.createElement(
-      "textarea",
-      {
-        value: cur.comments && cur.comments.block || "",
-        onChange: (e) => setComment("block", null, e.target.value),
-        placeholder: "\u5168\u4F53\u306E\u8B1B\u8A55\u3001\u8981\u56E0\u3001\u6B21\u6708\u306E\u91CD\u70B9\u65BD\u7B56\u306A\u3069",
-        style: {
-          width: "100%",
-          minHeight: 130,
-          fontFamily: FONT,
-          fontSize: 13,
-          lineHeight: 1.7,
-          padding: 10,
-          border: `1px solid ${C.border}`,
-          borderRadius: 4,
-          resize: "vertical",
-          boxSizing: "border-box"
-        }
-      }
-    ), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 8, display: "flex", gap: 8, flexWrap: "wrap" } }, /* @__PURE__ */ React.createElement(Btn, { small: true, onClick: () => setComment("block", null, draft) }, "\u6570\u5024\u304B\u3089\u8349\u6848\u3092\u5165\u308C\u308B"), /* @__PURE__ */ React.createElement(Btn, { small: true, onClick: () => {
-      navigator.clipboard.writeText(cur.comments && cur.comments.block || "");
-      flash("\u30B3\u30D4\u30FC\u3057\u307E\u3057\u305F");
-    } }, "\u30B3\u30D4\u30FC")), /* @__PURE__ */ React.createElement("details", { style: { marginTop: 10 } }, /* @__PURE__ */ React.createElement("summary", { style: { fontSize: 12, color: C.muted, cursor: "pointer" } }, "\u8349\u6848\u3092\u78BA\u8A8D\u3059\u308B"), /* @__PURE__ */ React.createElement("pre", { style: {
-      fontFamily: FONT,
-      fontSize: 12,
-      lineHeight: 1.7,
-      background: C.rowAlt,
-      padding: 10,
-      borderRadius: 4,
-      whiteSpace: "pre-wrap",
-      margin: "8px 0 0"
-    } }, draft))), groups.all.map((s) => {
-      const closed = isClosed(s);
-      const diffT = !closed && hasTarget(s) && s.mhs ? s.mhs - s.target : null;
-      const note = closed ? "\u5F53\u6708\u4F11\u696D" : hasTarget(s) ? `\u4EBA\u6642\u58F2\u4E0A ${fmt(s.mhs)}\u5186\uFF0F\u6307\u6A19 ${fmt(s.target)}\u5186\uFF08${signed(diffT)}\uFF09\u30FB\u4EBA\u4EF6\u8CBB\u7387 ${pct(s.laborPct)}` : `\u4EBA\u6642\u58F2\u4E0A ${fmt(s.mhs)}\u5186\uFF08\u6307\u6A19\u306A\u3057\uFF09\u30FB\u4EBA\u4EF6\u8CBB\u7387 ${pct(s.laborPct)}`;
-      return /* @__PURE__ */ React.createElement(Panel, { key: s.code, title: s.name, note }, /* @__PURE__ */ React.createElement(
-        "textarea",
-        {
-          value: cur.comments && cur.comments.stores && cur.comments.stores[s.code] || "",
-          onChange: (e) => setComment("store", s.code, e.target.value),
-          placeholder: "\u8981\u56E0\u3068\u5BFE\u7B56",
-          style: {
-            width: "100%",
-            minHeight: 70,
-            fontFamily: FONT,
-            fontSize: 13,
-            lineHeight: 1.7,
-            padding: 10,
-            border: `1px solid ${C.border}`,
-            borderRadius: 4,
-            resize: "vertical",
-            boxSizing: "border-box"
-          }
-        }
-      ));
-    }))), toast && /* @__PURE__ */ React.createElement("div", { style: {
+    })), margin: { top: 6, right: 8, left: 0, bottom: 4 } }, /* @__PURE__ */ React.createElement(CartesianGrid, { stroke: "#E7ECF2", vertical: false }), /* @__PURE__ */ React.createElement(XAxis, { dataKey: "name", tick: { fontSize: 11, fill: C.muted }, interval: 0 }), /* @__PURE__ */ React.createElement(YAxis, { tick: { fontSize: 11, fill: C.muted }, width: 54, domain: ["dataMin - 500", "dataMax + 300"] }), /* @__PURE__ */ React.createElement(Legend, { wrapperStyle: { fontSize: 11.5 } }), /* @__PURE__ */ React.createElement(Bar, { dataKey: "\u5F53\u5E74", fill: C.navyLight, isAnimationActive: false }), /* @__PURE__ */ React.createElement(Bar, { dataKey: "\u524D\u5E74", fill: "#BCCCDC", isAnimationActive: false }), /* @__PURE__ */ React.createElement(Line, { dataKey: "\u6307\u6A19", stroke: C.warn, strokeWidth: 2, dot: { r: 3.5 }, isAnimationActive: false }))))), trend.length >= 2 && /* @__PURE__ */ React.createElement("div", { className: "avoid-break", style: { marginBottom: 18 } }, /* @__PURE__ */ React.createElement(ReportHeading, null, "4. \u6708\u5225\u63A8\u79FB"), /* @__PURE__ */ React.createElement("div", { style: { height: 230 } }, /* @__PURE__ */ React.createElement(ResponsiveContainer, { width: "100%", height: "100%" }, /* @__PURE__ */ React.createElement(LineChart, { data: trend, margin: { top: 6, right: 8, left: 0, bottom: 4 } }, /* @__PURE__ */ React.createElement(CartesianGrid, { stroke: "#E7ECF2", vertical: false }), /* @__PURE__ */ React.createElement(XAxis, { dataKey: "name", tick: { fontSize: 11, fill: C.muted } }), /* @__PURE__ */ React.createElement(YAxis, { tick: { fontSize: 11, fill: C.muted }, width: 54, domain: ["dataMin - 300", "dataMax + 300"] }), /* @__PURE__ */ React.createElement(Legend, { wrapperStyle: { fontSize: 11.5 } }), /* @__PURE__ */ React.createElement(Line, { dataKey: "\u4EBA\u6642\u58F2\u4E0A", stroke: C.navy, strokeWidth: 2.5, dot: { r: 3.5 }, isAnimationActive: false }), /* @__PURE__ */ React.createElement(Line, { dataKey: "\u524D\u5E74\u4EBA\u6642\u58F2\u4E0A", stroke: "#A9BDD0", strokeWidth: 2, strokeDasharray: "4 3", dot: false, isAnimationActive: false })))), /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse", marginTop: 8 } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement(Th, { align: "left" }, "\u6708"), /* @__PURE__ */ React.createElement(Th, null, "\u58F2\u4E0A"), /* @__PURE__ */ React.createElement(Th, null, "\u524D\u5E74\u6BD4"), /* @__PURE__ */ React.createElement(Th, null, "\u4EBA\u4EF6\u8CBB\u7387"), /* @__PURE__ */ React.createElement(Th, null, "\u52B4\u50CD\u6642\u9593"), /* @__PURE__ */ React.createElement(Th, null, "\u4EBA\u6642\u58F2\u4E0A"), /* @__PURE__ */ React.createElement(Th, null, "\u524D\u5E74"))), /* @__PURE__ */ React.createElement("tbody", null, trend.slice().reverse().map((t, i) => /* @__PURE__ */ React.createElement("tr", { key: t.key, style: { background: i % 2 ? C.rowAlt : "transparent" } }, /* @__PURE__ */ React.createElement(Td, { align: "left", bold: true }, monthLabel(t.key)), /* @__PURE__ */ React.createElement(Td, null, fmt(t.\u58F2\u4E0A)), /* @__PURE__ */ React.createElement(Td, { tone: t.\u58F2\u4E0A\u524D\u5E74\u6BD4 >= 100 ? "pos" : "neg" }, t.\u58F2\u4E0A\u524D\u5E74\u6BD4 ? t.\u58F2\u4E0A\u524D\u5E74\u6BD4.toFixed(1) + "%" : "\u2014"), /* @__PURE__ */ React.createElement(Td, null, t.\u4EBA\u4EF6\u8CBB\u7387 ? t.\u4EBA\u4EF6\u8CBB\u7387.toFixed(1) + "%" : "\u2014"), /* @__PURE__ */ React.createElement(Td, null, fmt(t.\u52B4\u50CD\u6642\u9593, 1)), /* @__PURE__ */ React.createElement(Td, { bold: true }, fmt(t.\u4EBA\u6642\u58F2\u4E0A)), /* @__PURE__ */ React.createElement(Td, null, fmt(t.\u524D\u5E74\u4EBA\u6642\u58F2\u4E0A))))))), /* @__PURE__ */ React.createElement("div", { className: "avoid-break", style: { marginBottom: 18 } }, /* @__PURE__ */ React.createElement(ReportHeading, null, trend.length >= 2 ? "5" : "4", ". \u5168\u793E\u30FB\u95A2\u897F\u3068\u306E\u6BD4\u8F03"), /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse" } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null, /* @__PURE__ */ React.createElement(Th, { align: "left" }, "\u533A\u5206"), /* @__PURE__ */ React.createElement(Th, null, "\u58F2\u4E0A\u524D\u5E74\u6BD4"), /* @__PURE__ */ React.createElement(Th, null, "\u4EBA\u4EF6\u8CBB\u7387"), /* @__PURE__ */ React.createElement(Th, null, "\u524D\u5E74"), /* @__PURE__ */ React.createElement(Th, null, "\u4EBA\u6642\u58F2\u4E0A"), /* @__PURE__ */ React.createElement(Th, null, "\u524D\u5E74"), /* @__PURE__ */ React.createElement(Th, null, "\u524D\u5E74\u5DEE"))), /* @__PURE__ */ React.createElement("tbody", null, [["\u81EA\u30D6\u30ED\u30C3\u30AF", blockAgg], ["\u95A2\u897F", cur.aggregates.kansai], ["\u5168\u5E97", cur.aggregates.all]].filter(([, v]) => v).map(([label, v], i) => /* @__PURE__ */ React.createElement("tr", { key: label, style: { background: i === 0 ? "#E4EDF5" : "transparent" } }, /* @__PURE__ */ React.createElement(Td, { align: "left", bold: i === 0 }, label), /* @__PURE__ */ React.createElement(Td, { tone: v.sales >= v.salesLY ? "pos" : "neg" }, v.salesLY ? (v.sales / v.salesLY * 100).toFixed(1) + "%" : "\u2014"), /* @__PURE__ */ React.createElement(Td, null, pct(v.laborPct)), /* @__PURE__ */ React.createElement(Td, null, pct(v.laborPctLY)), /* @__PURE__ */ React.createElement(Td, { bold: i === 0 }, fmt(v.mhs)), /* @__PURE__ */ React.createElement(Td, null, fmt(v.mhsLY)), /* @__PURE__ */ React.createElement(Td, { tone: v.mhs >= v.mhsLY ? "pos" : "neg" }, signed(v.mhs - v.mhsLY))))))), (blockComment || storeComments.length > 0) && /* @__PURE__ */ React.createElement("div", { className: "avoid-break" }, /* @__PURE__ */ React.createElement(ReportHeading, null, trend.length >= 2 ? "6" : "5", ". \u7DCF\u62EC\u3068\u30B3\u30E1\u30F3\u30C8"), blockComment && /* @__PURE__ */ React.createElement("p", { style: { fontSize: 12.5, lineHeight: 1.9, whiteSpace: "pre-wrap", margin: "0 0 12px" } }, blockComment), storeComments.map(({ name, text }) => /* @__PURE__ */ React.createElement("div", { key: name, style: { marginBottom: 9 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12.5, fontWeight: 700, color: C.navy } }, name), /* @__PURE__ */ React.createElement("p", { style: { fontSize: 12.5, lineHeight: 1.9, whiteSpace: "pre-wrap", margin: "2px 0 0" } }, text)))), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 20, paddingTop: 8, borderTop: `1px solid ${C.border}`, fontSize: 10.5, color: C.muted } }, "\u4F5C\u6210\u65E5 ", (/* @__PURE__ */ new Date()).toLocaleDateString("ja-JP"), "\u3000\uFF0F\u3000\u51FA\u5178 \u4EBA\u4EF6\u8CBB\u9001\u4ED8\u7528\u30C7\u30FC\u30BF ", cur.meta.fileName))))), toast && /* @__PURE__ */ React.createElement("div", { style: {
       position: "fixed",
       left: "50%",
       transform: "translateX(-50%)",
