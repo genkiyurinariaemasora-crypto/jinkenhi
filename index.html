@@ -852,6 +852,22 @@
       const bn = blockRow ? blockRow.name.replace(/[（(].*?[）)]/, "") : "\u81EA\u30D6\u30ED\u30C3\u30AF";
       return `\u4EBA\u4EF6\u8CBB\u5206\u6790_${bn}_${cur.year}\u5E74${cur.month}\u6708.pdf`;
     };
+    const isBlank = (canvas) => {
+      try {
+        const t = document.createElement("canvas");
+        t.width = 60;
+        t.height = Math.max(1, Math.round(60 * canvas.height / canvas.width));
+        const g = t.getContext("2d");
+        g.drawImage(canvas, 0, 0, t.width, t.height);
+        const d = g.getImageData(0, 0, t.width, t.height).data;
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i] < 235 || d[i + 1] < 235 || d[i + 2] < 235) return false;
+        }
+        return true;
+      } catch (e) {
+        return false;
+      }
+    };
     const makePdf = async () => {
       const root = reportRef.current;
       if (!root || typeof html2canvas === "undefined" || !window.jspdf) {
@@ -862,6 +878,10 @@
       const wrap = root.parentElement;
       const prevOverflow = wrap ? wrap.style.overflowX : "";
       if (wrap) wrap.style.overflowX = "visible";
+      const sx = window.scrollX, sy = window.scrollY;
+      window.scrollTo(0, 0);
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      let inked = 0;
       try {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait", compress: true });
@@ -878,23 +898,13 @@
         const blocks = Array.from(root.children);
         for (let i = 0; i < blocks.length; i++) {
           const el = blocks[i];
-          const r = el.getBoundingClientRect();
-          const w = Math.max(el.scrollWidth, el.offsetWidth);
-          const h = Math.max(el.scrollHeight, el.offsetHeight);
           const canvas = await html2canvas(el, {
             scale: 2,
             backgroundColor: "#ffffff",
             useCORS: true,
-            logging: false,
-            x: r.left + window.scrollX,
-            y: r.top + window.scrollY,
-            width: w,
-            height: h,
-            scrollX: 0,
-            scrollY: 0,
-            windowWidth: document.documentElement.clientWidth,
-            windowHeight: document.documentElement.clientHeight
+            logging: false
           });
+          if (!isBlank(canvas)) inked++;
           const hMM = canvas.height * CW / canvas.width;
           const gap = i === 0 ? 0 : 4;
           if (hMM <= BOTTOM - M) {
@@ -935,12 +945,14 @@
           }
         }
         footer();
+        if (inked === 0) throw new Error("\u8CC7\u6599\u304C\u767D\u7D19\u306B\u306A\u308A\u307E\u3057\u305F\u3002\u753B\u9762\u3092\u4E00\u5EA6\u9589\u3058\u3066\u958B\u304D\u76F4\u3057\u3066\u304B\u3089\u3001\u3082\u3046\u4E00\u5EA6\u304A\u8A66\u3057\u304F\u3060\u3055\u3044");
         const blob = doc.output("blob");
         setPdfFile(new File([blob], pdfName(), { type: "application/pdf" }));
       } catch (e) {
         flash("PDF\u3092\u4F5C\u308C\u307E\u305B\u3093\u3067\u3057\u305F\uFF1A" + (e && e.message ? e.message : ""));
       } finally {
         if (wrap) wrap.style.overflowX = prevOverflow;
+        window.scrollTo(sx, sy);
         setPdfBusy(false);
       }
     };
